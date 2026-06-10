@@ -1,0 +1,15 @@
+{
+  "name": "wiki-random",
+  "owner": { "name": "June Eastham" },
+  "metadata": {
+    "description": "Marketplace hosting the wiki-random plugin.",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "wiki-random",
+      "source": "./",
+      "description": "Turn a seed number into a Wikipedia article through a deterministic, fully auditable modular-hash pipeline. Provides the /wiki-random skill."
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wiki-random"
+version = "1.0.0"
+description = "Turn a seed number into a Wikipedia article through a deterministic, fully auditable modular-hash pipeline."
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+authors = [{ name = "June Eastham" }]
+keywords = ["wikipedia", "random", "hash", "oracle", "deterministic", "cli"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Utilities",
+]
+dependencies = []   # standard library only
+
+[project.urls]
+Homepage = "https://github.com/potncoffee/wiki-random"
+Repository = "https://github.com/potncoffee/wiki-random"
+
+[project.scripts]
+wiki-random = "wiki_random.oracle:main"
+
+[project.optional-dependencies]
+test = ["pytest>=7"]
+
+[tool.setuptools]
+packages = ["wiki_random"]
