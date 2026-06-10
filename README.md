@@ -22,8 +22,12 @@ This one repository ships the tool in several forms:
 | **Claude Code plugin** | Claude Code users (others) | `/plugin marketplace add potncoffee/wiki-random` then `/plugin install wiki-random@wiki-random` |
 | **Personal skill** | your own Claude Code | symlink `skills/wiki-random` into `~/.claude/skills/` (gives `/wiki-random`) |
 | **Portable Agent Skill** | other agent frameworks | point them at `skills/wiki-random/SKILL.md` (open [agentskills.io](https://agentskills.io) format) |
+| **Browser app** | anyone, zero install | open [`webui/index.html`](webui/index.html) in a browser (runs entirely client-side) |
+| **Hosted web app** | a shareable URL | deploy [`webui/`](webui/) to Hugging Face Spaces (Gradio) |
 
-A web-UI uploadable package is planned but not yet included.
+See [`webui/README.md`](webui/README.md) for the web builds and an honest note on
+which web UIs can and cannot run the live Wikipedia lookup (LLM code sandboxes
+are network-isolated, so the browser/Spaces paths are the ones that work).
 
 ## CLI usage
 
