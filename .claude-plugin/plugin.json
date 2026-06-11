@@ -1,8 +1,0 @@
-{
-  "name": "wiki-random",
-  "description": "Turn a seed number into a Wikipedia article through a deterministic, fully auditable modular-hash pipeline. Adds the /wiki-random skill.",
-  "version": "1.0.0",
-  "author": { "name": "June Eastham" },
-  "homepage": "https://github.com/potncoffee/wiki-random",
-  "license": "MIT"
-}

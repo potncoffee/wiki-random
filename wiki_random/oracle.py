@@ -34,6 +34,34 @@ C3 = 211888927362711809            # increment  c3
 
 FALLBACK_CEILING = 83_407_206       # used only if the live ceiling fetch fails
 
+# The presentation doctrine, centralized here so the engine is the single source
+# of truth. It is emitted verbatim inside every generated AI prompt, so the
+# instructions travel with the data and do not depend on any separate file.
+DOCTRINE = """\
+When you present this reading to the user:
+
+1. Show the math. Display the labeled arithmetic block above verbatim so the
+   user can audit it. It is not magic; every step is shown. If they want to
+   check it themselves, give them the paste-and-run proof snippet.
+2. Link the article. Always give the https://en.wikipedia.org/?curid=<id> URL.
+3. Tell them what they landed on: a who / what / where / when / why / how, and
+   surface the genuinely odd details (Wikipedia logs strange facts plainly). If
+   you can, fetch a summary, e.g.
+   https://en.wikipedia.org/w/api.php?action=query&pageids=<id>&prop=extracts&exintro=1&explaintext=1&format=json
+
+Disambiguation pages: if the article is a disambiguation page (namespace 0 and
+not a redirect), then:
+  - Say plainly that it is a disambiguation page, a signpost rather than a
+    subject.
+  - Mini-summarize each listed entry, one line each.
+  - For each entry, give the reason it bears the name only if Wikipedia
+    documents it, and say so explicitly when it does not. Never invent a motive.
+  - For each See also, give a short compare and contrast against the headword.
+
+Honesty rule: whenever you explain why something is named, classified, or
+connected, ground it in what the linked Wikipedia articles actually state. When
+the reason is not documented, say so rather than confabulating."""
+
 
 def mix_steps(seed):
     """Return the labeled mixing steps as (name, value) pairs."""
@@ -106,6 +134,26 @@ def fetch_ceiling(fetch=_api_get):
         return FALLBACK_CEILING
 
 
+def fetch_extract(pageid, fetch=_api_get):
+    """Wikipedia's own lead extract (plain text) for a page id, or '' on failure.
+
+    Used by the human-facing reading so it can stand alone without an AI. The
+    text is Wikipedia's, quoted as-is, not a synthesis.
+    """
+    try:
+        data = fetch({
+            "action": "query",
+            "pageids": str(pageid),
+            "prop": "extracts",
+            "exintro": "1",
+            "explaintext": "1",
+        })
+        page = next(iter(data["query"]["pages"].values()))
+        return page.get("extract", "")
+    except Exception:
+        return ""
+
+
 class OracleResolutionError(Exception):
     pass
 
@@ -140,11 +188,10 @@ def _query_band(lo, hi, fetch):
             # letting a raw urllib error escape.
             raise NetworkUnavailableError(
                 "Could not reach Wikipedia to resolve the article (no network "
-                "access). The article lookup needs the internet. In a "
-                "network-isolated sandbox such as the ChatGPT or Claude.ai code "
-                "tool, do not call oracle() directly. Follow AI_START_HERE.md: "
-                "compute the math in the sandbox, then do the Wikipedia lookups "
-                "with the assistant's browser."
+                "access). The article lookup needs the internet. For an "
+                "offline-friendly path, generate an AI prompt instead (run "
+                "wiki-random without --human) and paste it into an assistant "
+                "that can browse the web; it will finish the lookup for you."
             ) from exc
         pages = data.get("query", {}).get("pages", {})
         for page in pages.values():
@@ -283,26 +330,187 @@ def format_verify(result):
     ])
 
 
+def build_prompt(seed, fetch=_api_get):
+    """Run the pipeline for prompt generation, deferring the lookup if offline.
+
+    Returns a result dict. With network it has resolved=True and an "article";
+    without, it has resolved=False and no article (the math through the hash is
+    still valid, and the generated prompt will delegate the lookup to the AI).
+    Unlike oracle(), this never raises on a missing network.
+    """
+    ceiling = fetch_ceiling(fetch)
+    steps = mix_steps(seed)
+    trace = mix_trace(seed)
+    sieved_id = sieve(steps[-1][1], ceiling)
+    result = {
+        "seed": seed,
+        "ceiling": ceiling,
+        "steps": steps,
+        "trace": trace,
+        "sieved_id": sieved_id,
+    }
+    try:
+        result["article"] = walk(sieved_id, fetch)
+        result["resolved"] = True
+    except NetworkUnavailableError:
+        result["resolved"] = False
+    return result
+
+
+def _format_constants():
+    return [
+        "  CONSTANTS  (identical every run)",
+        f"  Modulus      m  = {P:,}   (2^61 - 1, a Mersenne prime)",
+        f"  Multiplier   a1 = {A1:,}",
+        f"  Increment    c1 = {C1:,}",
+        f"  Multiplier   a2 = {A2:,}",
+        f"  Increment    c2 = {C2:,}",
+        f"  Multiplier   a3 = {A3:,}",
+        f"  Increment    c3 = {C3:,}",
+    ]
+
+
+def _format_hash_math(result):
+    """Labeled arithmetic through the hash only (network-independent)."""
+    trace = result["trace"]
+    L = _format_constants() + [
+        "",
+        "  INPUT",
+        f"  Input (seed) = {result['seed']:,}",
+        "",
+        "  COMPUTATION  (the hash is fixed for this seed, no network needed)",
+        "  Reduce input into the field:  input mod m",
+        f"      = {trace['reduction']['wraps']:,} whole wraps, "
+        f"remainder {trace['reduction']['remainder']:,}",
+    ]
+    syms = (("a1", "c1"), ("a2", "c2"), ("a3", "c3"))
+    for i, rd in enumerate(trace["rounds"], start=1):
+        am, cm = syms[i - 1]
+        L.append(f"  Round {i}:  (previous * {am} + {cm}) mod m")
+        L.append(f"      ({rd['prev']:,} * {rd['mult']:,} + {rd['add']:,})")
+        L.append(f"      = {rd['product']:,}")
+        L.append(f"      mod m = {rd['result']:,}")
+    L.append(f"  Mixed value (hash) = {trace['final']:,}")
+    return "\n".join(L)
+
+
+def _format_hash_verify(result):
+    """Paste-and-run proof of the hash alone (the id is computed live later)."""
+    return "\n".join([
+        "# -- verify the hash: paste into any Python 3 --",
+        "P = 2**61 - 1",
+        f"A = [{A1}, {A2}, {A3}]",
+        f"C = [{C1}, {C2}, {C3}]",
+        f"x = {result['seed']} % P",
+        "for a, c in zip(A, C): x = (x*a + c) % P",
+        "print('hash =', x)",
+        f"# expected -> hash = {result['steps'][-1][1]}",
+    ])
+
+
+def format_prompt(result):
+    """A self-contained prompt to paste into any AI assistant.
+
+    Carries this run's labeled math and the full presentation doctrine, so the
+    instructions travel with the data and do not depend on the assistant having
+    read any separate file. Two shapes: if the article resolved, the prompt asks
+    the assistant to present it; if not (offline), the prompt asks the assistant
+    to finish the lookup with its own web tools, then present it.
+    """
+    if result.get("resolved"):
+        a = result["article"]
+        return "\n".join([
+            "You are delivering a wiki-random oracle reading. A seed number was "
+            "turned into a real Wikipedia article by the deterministic pipeline "
+            "below.",
+            "",
+            "THE MATH  (show this to the user verbatim; it is auditable):",
+            "",
+            format_ritual(result),
+            "",
+            "PROOF  (offer this if the user wants to check the math themselves):",
+            "",
+            format_verify(result),
+            "",
+            f"THE ARTICLE: {a['title']}  ({a['url']})",
+            "",
+            DOCTRINE,
+        ])
+    # delegated: no network here, so the assistant finishes the lookup
+    hash_value = result["steps"][-1][1]
+    return "\n".join([
+        "You are delivering a wiki-random oracle reading. The deterministic math "
+        "below was computed offline; finish the lookup with your own web browsing "
+        "tool (it has internet even when a code sandbox does not), then present "
+        "the result.",
+        "",
+        "THE MATH SO FAR  (show this to the user verbatim; it is auditable):",
+        "",
+        _format_hash_math(result),
+        "",
+        "PROOF of the hash  (offer this if the user wants to check it):",
+        "",
+        _format_hash_verify(result),
+        "",
+        "FINISH THE LOOKUP with your web browsing tool:",
+        "  1. Fetch the live ceiling (the newest Wikipedia page id):",
+        f"     {API}?action=query&list=recentchanges&rctype=new&rclimit=1"
+        "&rcprop=ids&format=json",
+        "     Call it CEILING.",
+        f"  2. Compute the target id:  TARGET = ({hash_value} mod CEILING) + 1",
+        "  3. Walk to the nearest real article: query a 50-id window centered on "
+        "TARGET via",
+        f"     {API}?action=query&prop=info&pageids=ID1|ID2|...&format=json",
+        "     keep pages with ns == 0 and no 'missing' and no 'redirect', pick "
+        "the nearest to TARGET (ties go to the lower id), widening the window if "
+        "it is empty.",
+        "  4. The article URL is https://en.wikipedia.org/?curid=<that id>.",
+        "",
+        DOCTRINE,
+    ])
+
+
+def _print_human(result, verify):
+    """Human-facing reading: labeled math, the article, its link, and Wikipedia's
+    own lead summary so it stands alone without an AI."""
+    print(format_ritual(result))
+    extract = fetch_extract(result["article"]["pageid"])
+    if extract:
+        print()
+        print("  ABOUT THIS ARTICLE  (Wikipedia's own summary)")
+        print("  " + extract)
+    if verify:
+        print()
+        print(format_verify(result))
+
+
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
+    human = "--human" in argv
     verify = "--verify" in argv
-    args = [a for a in argv if a != "--verify"]
+    args = [a for a in argv if a not in ("--human", "--verify")]
     if not args:
-        print("usage: wiki-random [--verify] <seed-integer>")
+        print("usage: wiki-random [--human] [--verify] <seed-integer>")
         return 1
     try:
         seed = int(args[0])
     except ValueError:
         print(f"seed must be an integer, got {args[0]!r}")
         return 1
-    try:
-        result = oracle(seed)
-    except OracleResolutionError as exc:
-        print(exc)
-        return 1
-    print(format_ritual(result))
-    if verify:
-        print(format_verify(result))
+
+    if human:
+        # A human cannot delegate the lookup, so the network is required here.
+        try:
+            result = oracle(seed)
+        except OracleResolutionError as exc:
+            print(exc)
+            return 1
+        _print_human(result, verify)
+        return 0
+
+    # default: emit an AI prompt (resolves the article if online, delegates the
+    # lookup if not). Never fails on a missing network.
+    print(format_prompt(build_prompt(seed)))
     return 0
 
 

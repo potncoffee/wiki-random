@@ -217,6 +217,66 @@ def test_oracle_surfaces_network_error_from_the_walk():
         oracle.oracle(7, fetch=fetch)
 
 
+# --- build_prompt / format_prompt (the AI-prompt mode) ----------------------
+
+def test_build_prompt_resolves_with_network():
+    def fetch(params):
+        if params.get("list") == "recentchanges":
+            return {"query": {"recentchanges": [{"pageid": 1000}]}}
+        return FakeWiki({1: {"ns": 0, "title": "An Article"}})(params)
+
+    r = oracle.build_prompt(7, fetch=fetch)
+    assert r["resolved"] is True
+    assert r["article"]["title"] == "An Article"
+
+
+def test_build_prompt_delegates_without_network():
+    import urllib.error
+
+    def no_network(params):
+        raise urllib.error.URLError("offline")
+
+    r = oracle.build_prompt(7, fetch=no_network)
+    assert r["resolved"] is False
+    assert "article" not in r
+    # the hash is network-independent, so it is still correct
+    assert r["steps"][-1][1] == oracle.mix(7)
+
+
+def test_format_prompt_resolved_carries_math_and_doctrine():
+    result = {
+        "seed": 7,
+        "ceiling": 1000,
+        "steps": oracle.mix_steps(7),
+        "trace": oracle.mix_trace(7),
+        "sieved_id": 42,
+        "resolved": True,
+        "article": {"pageid": 5, "title": "An Article",
+                     "url": "https://en.wikipedia.org/?curid=5"},
+    }
+    text = oracle.format_prompt(result)
+    assert "Modulus" in text                       # the math is present
+    assert "https://en.wikipedia.org/?curid=5" in text
+    assert "disambiguation" in text.lower()        # doctrine travels with it
+    assert "Honesty rule" in text
+
+
+def test_format_prompt_delegated_carries_hash_and_lookup_steps():
+    result = {
+        "seed": 7,
+        "ceiling": oracle.FALLBACK_CEILING,
+        "steps": oracle.mix_steps(7),
+        "trace": oracle.mix_trace(7),
+        "sieved_id": 42,
+        "resolved": False,
+    }
+    text = oracle.format_prompt(result)
+    assert str(oracle.mix(7)) in text              # the authoritative hash
+    assert "recentchanges" in text                 # fetch-the-live-ceiling step
+    assert "mod CEILING" in text                   # sieve instruction
+    assert "Honesty rule" in text
+
+
 # --- mix_trace --------------------------------------------------------------
 
 def test_mix_trace_matches_mix():
@@ -306,21 +366,43 @@ def test_format_verify_snippet_runs_and_matches():
     assert f"id   = {oracle.sieve(oracle.mix(7), 1000)}" in out
 
 
-def test_main_verify_flag_appends_snippet(capsys, monkeypatch):
+def test_main_human_verify_flag_appends_snippet(capsys, monkeypatch):
     fake = {
         "seed": 7,
         "ceiling": 1000,
         "steps": oracle.mix_steps(7),
+        "trace": oracle.mix_trace(7),
         "sieved_id": 42,
         "article": {"pageid": 1, "title": "An Article",
                      "url": "https://en.wikipedia.org/?curid=1"},
     }
     monkeypatch.setattr(oracle, "oracle", lambda seed: fake)
-    code = oracle.main(["--verify", "7"])
+    monkeypatch.setattr(oracle, "fetch_extract", lambda pageid: "")
+    code = oracle.main(["--human", "--verify", "7"])
     out = capsys.readouterr().out
     assert code == 0
     assert "verify" in out
     assert "P = 2**61 - 1" in out
+
+
+def test_main_default_emits_ai_prompt(capsys, monkeypatch):
+    fake = {
+        "seed": 7,
+        "ceiling": 1000,
+        "steps": oracle.mix_steps(7),
+        "trace": oracle.mix_trace(7),
+        "sieved_id": 42,
+        "resolved": True,
+        "article": {"pageid": 1, "title": "An Article",
+                     "url": "https://en.wikipedia.org/?curid=1"},
+    }
+    monkeypatch.setattr(oracle, "build_prompt", lambda seed: fake)
+    code = oracle.main(["7"])
+    out = capsys.readouterr().out.lower()
+    assert code == 0
+    assert "oracle reading" in out          # framing line
+    assert "honesty rule" in out            # DOCTRINE travels with the prompt
+    assert "an article" in out
 
 
 def test_main_rejects_non_integer(capsys):
@@ -335,15 +417,16 @@ def test_main_requires_an_argument(capsys):
     assert "usage" in capsys.readouterr().out.lower()
 
 
-def test_main_reports_network_failure_cleanly(capsys, monkeypatch):
+def test_main_human_reports_network_failure_cleanly(capsys, monkeypatch):
+    # Human mode requires the network (it cannot delegate the lookup), so a
+    # missing network is a clean error, not a traceback.
     def boom(seed):
         raise oracle.NetworkUnavailableError(
             "Could not reach Wikipedia to resolve the article (no network "
-            "access). Follow AI_START_HERE.md.")
+            "access).")
 
     monkeypatch.setattr(oracle, "oracle", boom)
-    code = oracle.main(["7"])
+    code = oracle.main(["--human", "7"])
     out = capsys.readouterr().out.lower()
     assert code == 1
     assert "network" in out
-    assert "ai_start_here" in out

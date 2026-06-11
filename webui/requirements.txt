@@ -1,2 +1,0 @@
-gradio>=4.0
-wiki-random @ git+https://github.com/potncoffee/wiki-random
