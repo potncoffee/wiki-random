@@ -39,9 +39,9 @@ wiki-random 1729
 This prints a complete, self-contained **prompt you can paste into any AI
 assistant** (ChatGPT, Claude, anything). The prompt carries this run's labeled
 math, a paste-and-run proof, the resolved article, and the full instructions for
-how to present it (a who / what / where / when / why / how, disambiguation
-handling, an honesty rule). The instructions travel *with* the data, so it works
-in any assistant without installing anything.
+how to present it as a structured Markdown reply (a who / what / where / when /
+why / how, disambiguation handling, an honesty rule). The instructions travel
+*with* the data, so it works in any assistant without installing anything.
 
 It is adaptive about the network:
 

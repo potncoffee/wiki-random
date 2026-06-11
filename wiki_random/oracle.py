@@ -38,25 +38,35 @@ FALLBACK_CEILING = 83_407_206       # used only if the live ceiling fetch fails
 # of truth. It is emitted verbatim inside every generated AI prompt, so the
 # instructions travel with the data and do not depend on any separate file.
 DOCTRINE = """\
-When you present this reading to the user:
+Present the reading to the user as a structured Markdown reply. Use headers and
+bold to make the core information stand out. Do not write a wall of text, and do
+not abbreviate "to save space": the points below are requirements, not options.
 
-1. Show the math. Display the labeled arithmetic block above verbatim so the
-   user can audit it. It is not magic; every step is shown. If they want to
-   check it themselves, give them the paste-and-run proof snippet.
-2. Link the article. Always give the https://en.wikipedia.org/?curid=<id> URL.
-3. Tell them what they landed on: a who / what / where / when / why / how, and
-   surface the genuinely odd details (Wikipedia logs strange facts plainly). If
-   you can, fetch a summary, e.g.
-   https://en.wikipedia.org/w/api.php?action=query&pageids=<id>&prop=extracts&exintro=1&explaintext=1&format=json
+## The math
+Reproduce the labeled arithmetic block shown above EXACTLY, inside a fenced code
+block. Do not summarize it, shorten it, reformat it, or drop the constants. The
+whole point is that the user can audit every step. Then include the paste-and-run
+proof snippet so they can check it themselves; do not omit it.
 
-Disambiguation pages: if the article is a disambiguation page (namespace 0 and
-not a redirect), then:
-  - Say plainly that it is a disambiguation page, a signpost rather than a
-    subject.
-  - Mini-summarize each listed entry, one line each.
-  - For each entry, give the reason it bears the name only if Wikipedia
-    documents it, and say so explicitly when it does not. Never invent a motive.
-  - For each See also, give a short compare and contrast against the headword.
+## The article
+Put the article's full URL on its own line as a plain, clickable link:
+https://en.wikipedia.org/?curid=<id>
+Give the bare URL even if your house style usually avoids raw links; here the
+link is the point.
+
+## What you landed on
+Give all six, each labeled in bold: **Who**, **What**, **Where**, **When**,
+**Why** (the name), **How**. Then a short **Odd details** note surfacing the
+genuinely strange facts (Wikipedia logs strange facts plainly). Fetch a summary
+if you can:
+https://en.wikipedia.org/w/api.php?action=query&pageids=<id>&prop=extracts&exintro=1&explaintext=1&format=json
+
+## If it is a disambiguation page
+(namespace 0 and not a redirect): say plainly that it is a disambiguation page,
+a signpost rather than a subject; mini-summarize each listed entry, one line
+each; for each entry give the reason it bears the name only if Wikipedia
+documents it, and say so explicitly when it does not (never invent a motive);
+for each See also, give a short compare and contrast against the headword.
 
 Honesty rule: whenever you explain why something is named, classified, or
 connected, ground it in what the linked Wikipedia articles actually state. When
@@ -424,11 +434,12 @@ def format_prompt(result):
             "turned into a real Wikipedia article by the deterministic pipeline "
             "below.",
             "",
-            "THE MATH  (show this to the user verbatim; it is auditable):",
+            "THE MATH  (reproduce this EXACTLY in your reply, in a code block; "
+            "do not summarize it):",
             "",
             format_ritual(result),
             "",
-            "PROOF  (offer this if the user wants to check the math themselves):",
+            "PROOF  (include this in your reply so the user can check the math):",
             "",
             format_verify(result),
             "",
@@ -444,11 +455,12 @@ def format_prompt(result):
         "tool (it has internet even when a code sandbox does not), then present "
         "the result.",
         "",
-        "THE MATH SO FAR  (show this to the user verbatim; it is auditable):",
+        "THE MATH SO FAR  (reproduce this EXACTLY in your reply, in a code block; "
+        "do not summarize it):",
         "",
         _format_hash_math(result),
         "",
-        "PROOF of the hash  (offer this if the user wants to check it):",
+        "PROOF of the hash  (include this in your reply):",
         "",
         _format_hash_verify(result),
         "",
