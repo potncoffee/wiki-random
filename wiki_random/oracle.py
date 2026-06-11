@@ -13,6 +13,7 @@ itself is pure and reproducible from the seven constants below.
 
 import json
 import sys
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -109,6 +110,16 @@ class OracleResolutionError(Exception):
     pass
 
 
+class NetworkUnavailableError(OracleResolutionError):
+    """Raised when the live article lookup cannot reach the network.
+
+    A subclass of OracleResolutionError so existing callers that catch the base
+    class keep working. It exists as its own type so a sandbox-only run (for
+    example the ChatGPT or Claude.ai code tool, which has no internet) fails
+    with actionable guidance instead of a raw urllib traceback.
+    """
+
+
 def _query_band(lo, hi, fetch):
     """Return valid main-namespace, non-redirect page objects in [lo, hi]."""
     lo = max(1, lo)
@@ -116,11 +127,25 @@ def _query_band(lo, hi, fetch):
     candidates = []
     for i in range(0, len(ids), 50):           # MediaWiki: max 50 pageids/request
         chunk = ids[i:i + 50]
-        data = fetch({
-            "action": "query",
-            "prop": "info",
-            "pageids": "|".join(str(c) for c in chunk),
-        })
+        try:
+            data = fetch({
+                "action": "query",
+                "prop": "info",
+                "pageids": "|".join(str(c) for c in chunk),
+            })
+        except (urllib.error.URLError, OSError) as exc:
+            # Unlike fetch_ceiling (which can fall back to a constant), the walk
+            # genuinely needs the network: there is no offline substitute for
+            # "which page ids are real articles". Fail with guidance instead of
+            # letting a raw urllib error escape.
+            raise NetworkUnavailableError(
+                "Could not reach Wikipedia to resolve the article (no network "
+                "access). The article lookup needs the internet. In a "
+                "network-isolated sandbox such as the ChatGPT or Claude.ai code "
+                "tool, do not call oracle() directly. Follow AI_START_HERE.md: "
+                "compute the math in the sandbox, then do the Wikipedia lookups "
+                "with the assistant's browser."
+            ) from exc
         pages = data.get("query", {}).get("pages", {})
         for page in pages.values():
             if page.get("ns") == 0 and "missing" not in page and "redirect" not in page:
@@ -270,7 +295,11 @@ def main(argv=None):
     except ValueError:
         print(f"seed must be an integer, got {args[0]!r}")
         return 1
-    result = oracle(seed)
+    try:
+        result = oracle(seed)
+    except OracleResolutionError as exc:
+        print(exc)
+        return 1
     print(format_ritual(result))
     if verify:
         print(format_verify(result))

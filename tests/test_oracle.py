@@ -166,6 +166,25 @@ def test_walk_raises_when_exhausted():
         oracle.walk(5000, fetch=FakeWiki({}), max_widenings=1)
 
 
+def test_walk_raises_network_error_without_network():
+    # In a sandbox with no internet the fetch raises a urllib error. The walk
+    # must surface a clear NetworkUnavailableError, not a raw traceback and not
+    # a misleading "no article found" exhaustion error.
+    import pytest
+    import urllib.error
+
+    def no_network(params):
+        raise urllib.error.URLError("sandbox has no network")
+
+    with pytest.raises(oracle.NetworkUnavailableError):
+        oracle.walk(1000, fetch=no_network)
+
+
+def test_network_error_is_an_oracle_resolution_error():
+    # Subclassing keeps existing `except OracleResolutionError` callers working.
+    assert issubclass(oracle.NetworkUnavailableError, oracle.OracleResolutionError)
+
+
 # --- oracle orchestration ---------------------------------------------------
 
 def test_oracle_end_to_end_with_mock():
@@ -180,6 +199,22 @@ def test_oracle_end_to_end_with_mock():
     assert result["article"]["title"] == "An Article"
     assert result["seed"] == 7
     assert result["steps"][0] == ("Input (seed)", 7)
+
+
+def test_oracle_surfaces_network_error_from_the_walk():
+    # The sandbox case ChatGPT flagged: the ceiling call may succeed (or fall
+    # back), but the walk has no network. oracle() must raise a clear error
+    # rather than crash with an unhandled urllib exception.
+    import pytest
+    import urllib.error
+
+    def fetch(params):
+        if params.get("list") == "recentchanges":
+            return {"query": {"recentchanges": [{"pageid": 1000}]}}
+        raise urllib.error.URLError("no network for the walk")
+
+    with pytest.raises(oracle.NetworkUnavailableError):
+        oracle.oracle(7, fetch=fetch)
 
 
 # --- mix_trace --------------------------------------------------------------
@@ -298,3 +333,17 @@ def test_main_requires_an_argument(capsys):
     code = oracle.main([])
     assert code == 1
     assert "usage" in capsys.readouterr().out.lower()
+
+
+def test_main_reports_network_failure_cleanly(capsys, monkeypatch):
+    def boom(seed):
+        raise oracle.NetworkUnavailableError(
+            "Could not reach Wikipedia to resolve the article (no network "
+            "access). Follow AI_START_HERE.md.")
+
+    monkeypatch.setattr(oracle, "oracle", boom)
+    code = oracle.main(["7"])
+    out = capsys.readouterr().out.lower()
+    assert code == 1
+    assert "network" in out
+    assert "ai_start_here" in out
