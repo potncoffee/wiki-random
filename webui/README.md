@@ -16,21 +16,27 @@ work.
 
 ## The honest answer about "drop a zip into a web UI"
 
-The tool's last step makes a **live call to the Wikipedia API**. Most LLM web
-sandboxes are **network-isolated**, so a zip dropped into them cannot reach
-Wikipedia and the article lookup fails:
+The tool's last step makes a **live call to the Wikipedia API**. An LLM **code
+sandbox** is network-isolated, so a zip whose script tries to do the whole job
+in the sandbox cannot reach Wikipedia and the lookup fails. The fix is to not do
+the whole job in the sandbox: in ChatGPT and Claude.ai the assistant has a
+*separate* web-browsing tool that does have internet, so it runs the math in the
+sandbox and does the Wikipedia lookups through its browser. That split is what
+[`../AI_START_HERE.md`](../AI_START_HERE.md) instructs.
 
-| Target | Upload a zip? | Has internet? | wiki-random works? |
-|--------|---------------|---------------|--------------------|
+| Target | Upload a zip? | Code sandbox has internet? | wiki-random works? |
+|--------|---------------|----------------------------|--------------------|
 | Open `index.html` in a browser | n/a (just open the file) | yes (your browser) | **Yes** |
 | Hugging Face Spaces (Gradio) | yes | yes | **Yes** |
 | Google Colab / Replit | yes / notebook | yes | Yes (with a run step) |
-| Claude.ai Skills | yes | **no (sandbox proxy)** | No |
-| ChatGPT Code Interpreter | yes | **no** | No |
+| Claude.ai (assistant + browsing) | yes | no, but its browser does | **Yes — via `AI_START_HERE.md`** |
+| ChatGPT (assistant + browsing) | yes | no, but its browser does | **Yes — via `AI_START_HERE.md`** |
+| A script run *only* in a code sandbox | yes | **no** | No (the walk cannot fetch) |
 | ChatGPT Canvas (Pyodide) | code only | CORS-gated | Unreliable |
 
-So there is no "drop a zip into ChatGPT/Claude and it works" path for the live
-lookup. The two paths below are the real ones.
+So "drop a zip into ChatGPT/Claude and it works" *is* possible — but only because
+the assistant browses on the sandbox's behalf, not because the sandbox itself
+reaches the network. The browser and Spaces paths below need no such split.
 
 ## 1. `index.html` — zero install, runs in the browser (recommended)
 

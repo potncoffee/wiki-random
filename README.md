@@ -24,10 +24,14 @@ This one repository ships the tool in several forms:
 | **Portable Agent Skill** | other agent frameworks | point them at `skills/wiki-random/SKILL.md` (open [agentskills.io](https://agentskills.io) format) |
 | **Browser app** | anyone, zero install | open [`webui/index.html`](webui/index.html) in a browser (runs entirely client-side) |
 | **Hosted web app** | a shareable URL | deploy [`webui/`](webui/) to Hugging Face Spaces (Gradio) |
+| **ChatGPT / Claude.ai** | chat-app users | upload the repo (or its zip) and the assistant follows [`AI_START_HERE.md`](AI_START_HERE.md) |
 
 See [`webui/README.md`](webui/README.md) for the web builds and an honest note on
-which web UIs can and cannot run the live Wikipedia lookup (LLM code sandboxes
-are network-isolated, so the browser/Spaces paths are the ones that work).
+which web UIs can and cannot run the live Wikipedia lookup. The short version:
+the code sandbox inside ChatGPT and Claude.ai has no internet, but those
+assistants have a *separate* web-browsing tool that does. [`AI_START_HERE.md`](AI_START_HERE.md)
+tells the assistant to run the math in its sandbox and do the Wikipedia lookups
+through its browser, so the chat apps work after all.
 
 ## CLI usage
 
