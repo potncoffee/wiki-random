@@ -80,7 +80,9 @@ wiki-random --human --verify 1729
   Each multiply is a bijection mod the prime, and each `+ c` breaks the linear
   rhythm so consecutive seeds land on unrelated articles (avalanche).
 - The **sieve** maps the hash into `[1, ceiling]`, where `ceiling` is the live
-  maximum Wikipedia page id (fetched per run; falls back to a constant offline).
+  maximum Wikipedia page id (fetched per run; offline it falls back to a
+  date-based estimate that grows ~10,000/day from an anchor, rather than a frozen
+  constant).
 - The **walk** queries a 50-ID window centered on the target and picks the
   nearest valid main-namespace, non-redirect article (ties go to the lower id),
   widening if the center is empty.

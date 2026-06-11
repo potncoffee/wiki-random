@@ -11,6 +11,7 @@ id), which grows over time, so a seed slowly drifts to new articles. The math
 itself is pure and reproducible from the seven constants below.
 """
 
+import datetime
 import json
 import sys
 import urllib.error
@@ -32,7 +33,25 @@ C2 = 1013904242948204167           # increment  c2
 A3 = 784637716923335289             # multiplier a3
 C3 = 211888927362711809            # increment  c3
 
-FALLBACK_CEILING = 83_407_206       # used only if the live ceiling fetch fails
+# Offline estimate of Wikipedia's maximum page id, used only when the live fetch
+# fails. Rather than freeze a constant (page ids climb by roughly ten thousand a
+# day, so a fixed value goes stale fast), extrapolate linearly from an anchor so
+# the estimate keeps pace with the encyclopedia's growth.
+CEILING_ANCHOR_DATE = datetime.date(2026, 6, 10)
+CEILING_ANCHOR_VALUE = 83_415_546          # live ceiling observed on the anchor date
+CEILING_GROWTH_PER_DAY = 10_000
+
+
+def estimated_ceiling(today=None):
+    """Date-extrapolated offline estimate of the live page-id ceiling.
+
+    The anchor value plus CEILING_GROWTH_PER_DAY for each day after the anchor
+    date. Never drops below the anchor: a run dated on or before the anchor just
+    gets the anchor value.
+    """
+    today = today or datetime.date.today()
+    days = (today - CEILING_ANCHOR_DATE).days
+    return CEILING_ANCHOR_VALUE + CEILING_GROWTH_PER_DAY * max(0, days)
 
 # The presentation doctrine, centralized here so the engine is the single source
 # of truth. It is emitted verbatim inside every generated AI prompt, so the
@@ -141,7 +160,7 @@ def fetch_ceiling(fetch=_api_get):
         })
         return int(data["query"]["recentchanges"][0]["pageid"])
     except Exception:
-        return FALLBACK_CEILING
+        return estimated_ceiling()
 
 
 def fetch_extract(pageid, fetch=_api_get):
@@ -468,8 +487,11 @@ def format_prompt(result):
         "  1. Fetch the live ceiling (the newest Wikipedia page id):",
         f"     {API}?action=query&list=recentchanges&rctype=new&rclimit=1"
         "&rcprop=ids&format=json",
-        "     Call it CEILING.",
-        f"  2. Compute the target id:  TARGET = ({hash_value} mod CEILING) + 1",
+        "     Call it CEILING. Always prefer this live value.",
+        f"  2. Compute the target id:  TARGET = ({hash_value} mod CEILING) + 1.",
+        f"     Fallback only if you genuinely cannot fetch the ceiling: use the "
+        f"date-based estimate CEILING = {result['ceiling']:,}, which gives "
+        f"TARGET = {result['sieved_id']:,}.",
         "  3. Walk to the nearest real article: query a 50-id window centered on "
         "TARGET via",
         f"     {API}?action=query&prop=info&pageids=ID1|ID2|...&format=json",

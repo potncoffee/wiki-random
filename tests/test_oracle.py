@@ -95,18 +95,30 @@ def test_fetch_ceiling_reads_newest_pageid():
     assert oracle.fetch_ceiling(fetch=fake_fetch) == 83_407_206
 
 
-def test_fetch_ceiling_falls_back_on_error():
+def test_fetch_ceiling_falls_back_to_estimate_on_error():
     def boom(params):
         raise RuntimeError("network down")
 
-    assert oracle.fetch_ceiling(fetch=boom) == oracle.FALLBACK_CEILING
+    assert oracle.fetch_ceiling(fetch=boom) == oracle.estimated_ceiling()
 
 
-def test_fetch_ceiling_falls_back_on_bad_shape():
+def test_fetch_ceiling_falls_back_to_estimate_on_bad_shape():
     def weird(params):
         return {"unexpected": True}
 
-    assert oracle.fetch_ceiling(fetch=weird) == oracle.FALLBACK_CEILING
+    assert oracle.fetch_ceiling(fetch=weird) == oracle.estimated_ceiling()
+
+
+def test_estimated_ceiling_grows_ten_thousand_per_day():
+    import datetime
+    anchor = oracle.CEILING_ANCHOR_DATE
+    base = oracle.CEILING_ANCHOR_VALUE
+    # on the anchor date itself, no growth
+    assert oracle.estimated_ceiling(anchor) == base
+    # eleven days later, eleven times ten thousand
+    assert oracle.estimated_ceiling(anchor + datetime.timedelta(days=11)) == base + 110_000
+    # never below the anchor for an earlier date
+    assert oracle.estimated_ceiling(anchor - datetime.timedelta(days=5)) == base
 
 
 # --- walk (the resolver) ----------------------------------------------------
@@ -264,7 +276,7 @@ def test_format_prompt_resolved_carries_math_and_doctrine():
 def test_format_prompt_delegated_carries_hash_and_lookup_steps():
     result = {
         "seed": 7,
-        "ceiling": oracle.FALLBACK_CEILING,
+        "ceiling": oracle.CEILING_ANCHOR_VALUE,
         "steps": oracle.mix_steps(7),
         "trace": oracle.mix_trace(7),
         "sieved_id": 42,
@@ -274,6 +286,7 @@ def test_format_prompt_delegated_carries_hash_and_lookup_steps():
     assert str(oracle.mix(7)) in text              # the authoritative hash
     assert "recentchanges" in text                 # fetch-the-live-ceiling step
     assert "mod CEILING" in text                   # sieve instruction
+    assert "date-based estimate" in text           # offline ceiling fallback
     assert "Honesty rule" in text
 
 
