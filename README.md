@@ -65,7 +65,7 @@ run with a grown ceiling lands on a different article.
 
 - **Modulus** `m = 2^61 - 1` (a Mersenne prime), far larger than the page-ID
   range, so the final reduction is near-uniform.
-- Three rounds of `x = (x * a + c) mod m` — a linear-congruential mixing chain.
+- Three rounds of `x = (x * a + c) mod m`, a linear-congruential mixing chain.
   Each multiply is a bijection mod the prime, and each `+ c` breaks the linear
   rhythm so consecutive seeds land on unrelated articles (avalanche).
 - The **sieve** maps the hash into `[1, ceiling]`, where `ceiling` is the live
@@ -93,7 +93,7 @@ the plugin marketplace get the namespaced `/wiki-random:wiki-random`.)
 pytest -q
 ```
 
-All tests are offline — the network is injected via a fake, so the suite is fast
+All tests are offline (the network is injected via a fake), so the suite is fast
 and deterministic.
 
 ## License

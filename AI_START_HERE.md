@@ -1,4 +1,69 @@
-# AI, start here — running wiki-random inside ChatGPT or Claude.ai
+# Using wiki-random in ChatGPT or Claude.ai
+
+**Two audiences read this file.** If you are the *person* setting this up, read
+"For the human: setting it up" directly below. If you are the *assistant* a human
+has handed this to, skip ahead to "AI, start here".
+
+## For the human: setting it up
+
+You do not need a Custom GPT or a Project. A plain chat works, because both
+ChatGPT and Claude.ai can browse the web in an ordinary conversation, and that is
+the only part of the tool that needs the internet. The Custom GPT and Project
+versions below are just so you do not have to re-upload the files every time.
+
+Whichever path you pick, the prompt to the assistant is the same:
+
+> Read AI_START_HERE.md and follow it. Seed: 1729
+
+(Use any integer you like as the seed. Add "and show the verify proof" if you
+want the paste-and-run math snippet.)
+
+### ChatGPT, one-off (plain chat)
+
+1. Start a new chat on a model with web browsing on (any current GPT model).
+2. Click the attach button and upload this repository as a `.zip` (or upload
+   `AI_START_HERE.md` together with the `wiki_random/` folder).
+3. Send the prompt above.
+
+### ChatGPT, reusable (Custom GPT)
+
+1. Go to **Explore GPTs → Create**.
+2. On the **Configure** tab, turn on **Web Search** (under Capabilities).
+3. Upload the repo zip (or `AI_START_HERE.md` + `wiki_random/oracle.py`) under
+   **Knowledge**.
+4. In **Instructions**, paste: *"For every seed the user gives, follow
+   AI_START_HERE.md exactly: compute the math in the code tool, do the Wikipedia
+   lookups with web browsing, then show the labeled output."*
+5. Save. From then on you just type a number.
+
+### Claude.ai, one-off (plain chat)
+
+1. Make sure web search is enabled (Settings → Profile/Capabilities).
+2. Start a new chat, attach the repo zip (or `AI_START_HERE.md` +
+   `wiki_random/oracle.py`) with the paperclip.
+3. Send the prompt above.
+
+### Claude.ai, reusable (Project)
+
+1. Go to **Projects → New project**.
+2. Add the repo files to the project's knowledge.
+3. In the project's **custom instructions**, paste the same line as the Custom
+   GPT step 4 above.
+4. Open a chat inside the project and type a seed.
+
+### The non-chat ways (no AI involved)
+
+If you would rather not go through a chat assistant at all, the repo ships other
+front ends, all documented in [`README.md`](README.md):
+
+- **Just you, in a browser:** open [`webui/index.html`](webui/index.html). It does
+  the whole thing client-side, no AI and no install.
+- **A terminal:** `pip install wiki-random`, then `wiki-random 1729`.
+- **Claude Code:** install the skill and run `/wiki-random 1729`.
+
+---
+
+# AI, start here
 
 You are a chat assistant (ChatGPT or Claude.ai) and a human has just handed you
 this project. They want a **wiki-random reading**: give them a seed number, and
@@ -28,7 +93,7 @@ Run these four steps in order. Steps 1 and 3 use your **browsing** tool. Steps 2
 and 4 use your **code** tool (the files in this repo are pure Python 3 standard
 library, no installs needed).
 
-### Step 1 — Browser: get the live ceiling
+### Step 1: get the live ceiling (browser tool)
 
 Fetch this URL with your browsing tool and read the newest page id:
 
@@ -41,7 +106,7 @@ browser genuinely cannot fetch it, and only then, fall back to the
 `FALLBACK_CEILING` constant in `wiki_random/oracle.py`, and tell the user you
 used a stale ceiling.)
 
-### Step 2 — Code: compute the target page id (pure math, no network)
+### Step 2: compute the target page id (code tool, pure math, no network)
 
 In your code tool, reuse the canonical functions so the math is identical to the
 CLI:
@@ -62,7 +127,7 @@ print(target_id)
 `target_id` is the ideal landing spot. The next step finds the nearest real
 article to it.
 
-### Step 3 — Browser: walk to the nearest real article
+### Step 3: walk to the nearest real article (browser tool)
 
 Real page ids have gaps (deleted pages, redirects, non-article namespaces), so
 `target_id` itself may not be a valid article. Reproduce the "walk" by hand with
@@ -86,7 +151,7 @@ your browsing tool:
 Record the winning page's `pageid` and `title`. Its URL is
 `https://en.wikipedia.org/?curid=<pageid>`.
 
-### Step 4 — Code: render the exact labeled output
+### Step 4: render the exact labeled output (code tool)
 
 Hand the pieces back to the canonical formatter so the on-screen math looks
 exactly like the CLI's. `format_ritual` does no network; it only formats the dict
@@ -139,7 +204,7 @@ redirect, so it passes the filter). You can confirm it is one by adding
 `&prop=pageprops&ppprop=disambiguation` to an info query: a disambiguation page
 carries a `pageprops.disambiguation` marker. When you land on one:
 
-1. **Say plainly that it is a disambiguation page** — a signpost, not a subject.
+1. **Say plainly that it is a disambiguation page**, a signpost, not a subject.
 2. **Mini-summarize each listed entry**, one line each.
 3. **For each entry, give the reason it bears the name only if Wikipedia
    documents it, and say so explicitly when it does not. Never invent a motive.**
